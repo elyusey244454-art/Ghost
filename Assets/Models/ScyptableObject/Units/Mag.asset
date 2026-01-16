@@ -1,0 +1,20 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ab6c537429a1ce14789779c68c1c549a, type: 3}
+  m_Name: Mag
+  m_EditorClassIdentifier: 
+  unitPrefab: {fileID: 7326699616392753266, guid: b4b43261d28604246ae701a28a2761ef, type: 3}
+  unitName: Mag
+  unitSpeed: 20
+  unitHP: 70
+  priceResurces: 14
+  componentResistance: 5
