@@ -37,6 +37,26 @@ namespace Ghost.CarSystem
         
         [Tooltip("Точка крепления крыльев или ракеты (сверху)")]
         public AttachmentPoint topAttachmentPoint;
+        
+        /// <summary>
+        /// Получает все точки крепления определенного типа
+        /// </summary>
+        public AttachmentPoint[] GetAttachmentPointsByType(AttachmentPoint.PartType type)
+        {
+            System.Collections.Generic.List<AttachmentPoint> points = new System.Collections.Generic.List<AttachmentPoint>();
+            
+            if (frontWheelPoint != null && frontWheelPoint.partType == type) points.Add(frontWheelPoint);
+            if (backWheelPoint != null && backWheelPoint.partType == type) points.Add(backWheelPoint);
+            if (propellerPoint != null && propellerPoint.partType == type) points.Add(propellerPoint);
+            if (topAttachmentPoint != null && (topAttachmentPoint.partType == type || 
+                (type == AttachmentPoint.PartType.Wing && topAttachmentPoint.partType == AttachmentPoint.PartType.Rocket) ||
+                (type == AttachmentPoint.PartType.Rocket && topAttachmentPoint.partType == AttachmentPoint.PartType.Wing)))
+            {
+                points.Add(topAttachmentPoint);
+            }
+            
+            return points.ToArray();
+        }
 
         [Header("Текущее состояние")]
         [Tooltip("Текущее тело транспорта в сцене")]
@@ -45,6 +65,10 @@ namespace Ghost.CarSystem
         [Header("Скрипт движения")]
         [Tooltip("Скрипт, который будет управлять движением транспорта после сборки")]
         public CarMovement carMovement;
+
+        [Header("UI подсветка")]
+        [Tooltip("Список подсветок точек крепления")]
+        private AttachmentPointHighlighter[] highlighters;
 
         /// <summary>
         /// Создает тело транспорта из выбранного префаба
@@ -78,6 +102,9 @@ namespace Ghost.CarSystem
 
             // Находим точки крепления на новом теле
             FindAttachmentPoints();
+            
+            // Инициализируем подсветки
+            InitializeHighlighters();
 
             Debug.Log($"Создано тело: {bodyPrefab.name}");
         }
@@ -279,6 +306,64 @@ namespace Ghost.CarSystem
         }
 
         /// <summary>
+        /// Инициализирует подсветки точек крепления
+        /// </summary>
+        private void InitializeHighlighters()
+        {
+            // Находим все подсветки в сцене
+            highlighters = FindObjectsOfType<AttachmentPointHighlighter>();
+            
+            // Связываем подсветки с точками крепления
+            foreach (AttachmentPointHighlighter highlighter in highlighters)
+            {
+                if (highlighter.attachmentPoint == frontWheelPoint ||
+                    highlighter.attachmentPoint == backWheelPoint ||
+                    highlighter.attachmentPoint == propellerPoint ||
+                    highlighter.attachmentPoint == topAttachmentPoint)
+                {
+                    // Подсветка уже связана
+                }
+            }
+        }
+
+        /// <summary>
+        /// Показывает подсветку для точек крепления определенного типа
+        /// </summary>
+        public void ShowHighlightForPartType(AttachmentPoint.PartType partType)
+        {
+            if (highlighters == null)
+            {
+                InitializeHighlighters();
+            }
+
+            foreach (AttachmentPointHighlighter highlighter in highlighters)
+            {
+                if (highlighter.attachmentPoint != null && 
+                    highlighter.attachmentPoint.partType == partType &&
+                    highlighter.attachmentPoint.IsEmpty())
+                {
+                    highlighter.ShowHighlight();
+                }
+            }
+        }
+
+        /// <summary>
+        /// Скрывает все подсветки
+        /// </summary>
+        public void HideAllHighlights()
+        {
+            if (highlighters == null) return;
+
+            foreach (AttachmentPointHighlighter highlighter in highlighters)
+            {
+                if (highlighter != null)
+                {
+                    highlighter.HideHighlight();
+                }
+            }
+        }
+
+        /// <summary>
         /// Завершает сборку и запускает движение транспорта
         /// </summary>
         public void FinishBuilding()
@@ -301,6 +386,9 @@ namespace Ghost.CarSystem
                 Debug.LogError("Нельзя завершить сборку: нет заднего колеса!");
                 return;
             }
+
+            // Скрываем все подсветки
+            HideAllHighlights();
 
             // Включаем скрипт движения
             if (carMovement != null)
