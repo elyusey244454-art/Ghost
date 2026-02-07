@@ -21,7 +21,7 @@ namespace VehicleConstructor
         [SerializeField] private Transform target; // Цель (транспорт)
         
         [Header("Follow Settings")]
-        [SerializeField] private Vector3 offset = new Vector3(-5, 3, 0); // Смещение камеры относительно транспорта
+        [SerializeField] private Vector3 offset = new Vector3(2, 2, -5); // Смещение камеры относительно транспорта
         [SerializeField] private bool smoothFollow = true; // Плавное следование
         [SerializeField] private float smoothSpeed = 10f; // Скорость плавного следования (увеличена для уменьшения дерганья)
         [SerializeField] private UpdateMode updateMode = UpdateMode.FixedUpdate; // Режим обновления

@@ -354,28 +354,6 @@ namespace VehicleConstructor
             vehicleRoot.position = originalVehiclePosition;
             vehicleLifted = false;
         }
-
-        #if UNITY_EDITOR
-        /// <summary>
-        /// Визуализация радиуса активации в редакторе
-        /// </summary>
-        void OnDrawGizmosSelected()
-        {
-            if (partActivators == null) return;
-
-            Gizmos.color = Color.yellow;
-            foreach (var activatorList in partActivators.Values)
-            {
-                foreach (var activator in activatorList)
-                {
-                    if (!activator.IsActivated)
-                    {
-                        Gizmos.DrawWireSphere(activator.transform.position, activationRadius);
-                    }
-                }
-            }
-        }
-        #endif
     }
 }
 

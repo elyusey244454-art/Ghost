@@ -10,7 +10,7 @@ namespace VehicleConstructor
     {
         [Header("Rotation Settings")]
         [SerializeField] private float rotationSpeed = 360f; // Скорость вращения (градусы в секунду)
-        [SerializeField] private Vector3 rotationAxis = new Vector3(0, 0, 1); // Ось вращения (локальная)
+        [SerializeField] private Vector3 rotationAxis = new Vector3(1, 0, 0); // Ось вращения (локальная)
 
         [Header("Auto Detection")]
         [SerializeField] private bool autoDetectVehicle = true; // Автоматически искать транспорт
@@ -58,22 +58,6 @@ namespace VehicleConstructor
         public void SetVehicleRigidbody(Rigidbody rb)
         {
             vehicleRigidbody = rb;
-        }
-
-        /// <summary>
-        /// Начать вращение (для ручного управления)
-        /// </summary>
-        public void StartRotation()
-        {
-            isRotating = true;
-        }
-
-        /// <summary>
-        /// Остановить вращение (для ручного управления)
-        /// </summary>
-        public void StopRotation()
-        {
-            isRotating = false;
         }
     }
 }
