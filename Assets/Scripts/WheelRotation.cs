@@ -16,7 +16,6 @@ namespace VehicleConstructor
         [SerializeField] private bool autoDetectVehicle = true; // Автоматически искать транспорт
         
         private Rigidbody vehicleRigidbody; // Rigidbody транспорта для определения скорости
-        private bool isRotating = false;
 
         void Start()
         {
@@ -61,4 +60,5 @@ namespace VehicleConstructor
         }
     }
 }
+
 

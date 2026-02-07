@@ -6,70 +6,58 @@ namespace VehicleConstructor
 {
     /// <summary>
     /// Главный менеджер конструктора транспорта
-    /// SOLID: 
-    /// - Single Responsibility: управление конструктором
-    /// - Open/Closed: легко расширяется добавлением новых PartActivator и HintController
-    /// - Dependency Inversion: зависит от абстракций (компонентов), а не конкретных классов
-    /// Паттерн: Singleton для глобального доступа
+    /// SOLID: Single Responsibility - управление конструктором
+    /// Упрощенная версия без избыточного кэширования
     /// </summary>
     public class VehicleConstructorManager : MonoBehaviour
     {
-        // Singleton instance
-        private static VehicleConstructorManager instance;
-        public static VehicleConstructorManager Instance => instance;
+        // Singleton
+        public static VehicleConstructorManager Instance { get; private set; }
 
         [Header("References")]
-        [SerializeField] private Transform vehicleRoot; // Корень транспорта
-        
+        [SerializeField] private Transform vehicleRoot;
+
         [Header("Settings")]
-        [SerializeField] private float activationRadius = 2f; // Радиус для активации детали
-        [SerializeField] private float vehicleLiftHeight = 0.5f; // На сколько поднять транспорт при установке колёс
-        [SerializeField] private bool autoLiftOnFirstWheel = true; // Автоматически поднимать при первом колесе
-        
-        // Кэш всех активаторов и подсказок
-        private Dictionary<PartType, List<PartActivator>> partActivators = new Dictionary<PartType, List<PartActivator>>();
-        private Dictionary<PartType, List<HintController>> hintsByType = new Dictionary<PartType, List<HintController>>();
+        [SerializeField] private float activationRadius = 2f;
+        [SerializeField] private float vehicleLiftHeight = 0.5f;
+
+        // Простые списки компонентов
+        private List<PartActivator> allActivators = new List<PartActivator>();
         private List<HintController> allHints = new List<HintController>();
-        private Dictionary<HintController, PartActivator> hintToActivatorCache = new Dictionary<HintController, PartActivator>(); // Кэш связей hint ↔ activator
-        private Dictionary<PartActivator, HintController> activatorToHintCache = new Dictionary<PartActivator, HintController>(); // Кэш связей activator ↔ hint
         
-        private PartType? currentDraggingType = null;
-        private bool vehicleLifted = false; // Поднят ли уже транспорт
-        private Vector3 originalVehiclePosition; // Исходная позиция транспорта
+        private bool vehicleLifted = false;
+        private Vector3 originalVehiclePosition;
 
         void Awake()
         {
-            // Singleton pattern
-            if (instance != null && instance != this)
+            // Singleton
+            if (Instance != null && Instance != this)
             {
-                Debug.LogWarning("[VehicleConstructor] Обнаружен дубликат VehicleConstructorManager! Уничтожаем...");
                 Destroy(gameObject);
                 return;
             }
-            instance = this;
+            Instance = this;
 
-            // Сохраняем исходную позицию транспорта
             if (vehicleRoot != null)
             {
                 originalVehiclePosition = vehicleRoot.position;
             }
             
-            InitializeComponents();
+            Initialize();
         }
 
         void OnDestroy()
         {
-            // Очищаем singleton при уничтожении
-            if (instance == this)
+            if (Instance == this)
             {
-                instance = null;
+                Instance = null;
             }
         }
 
         /// <summary>
-        /// Инициализация всех компонентов (SOLID: Interface Segregation)
+        /// Инициализация - собираем все компоненты
         /// </summary>
-        private void InitializeComponents()
+        private void Initialize()
         {
             if (vehicleRoot == null)
             {
@@ -77,104 +65,42 @@ namespace VehicleConstructor
                 return;
             }
 
-            // Находим все активаторы деталей
-            var activators = vehicleRoot.GetComponentsInChildren<PartActivator>(true);
-            foreach (var activator in activators)
-            {
-                if (!partActivators.ContainsKey(activator.PartType))
-                {
-                    partActivators[activator.PartType] = new List<PartActivator>();
-                }
-                partActivators[activator.PartType].Add(activator);
-                Debug.Log($"[VehicleConstructor] Найден активатор: {activator.PartType}");
-            }
-
-            // Находим все подсказки
+            allActivators = vehicleRoot.GetComponentsInChildren<PartActivator>(true).ToList();
             allHints = vehicleRoot.GetComponentsInChildren<HintController>(true).ToList();
-            foreach (var hint in allHints)
-            {
-                if (!hintsByType.ContainsKey(hint.CompatiblePartType))
-                {
-                    hintsByType[hint.CompatiblePartType] = new List<HintController>();
-                }
-                hintsByType[hint.CompatiblePartType].Add(hint);
-                Debug.Log($"[VehicleConstructor] Найдена подсказка для: {hint.CompatiblePartType}");
-            }
 
-            // Создаём кэш связей hint ↔ activator (один раз при инициализации)
-            BuildHintActivatorCache();
-
-            Debug.Log($"[VehicleConstructor] Инициализация завершена. Активаторов: {activators.Length}, Подсказок: {allHints.Count}");
+            Debug.Log($"[VehicleConstructor] Найдено: {allActivators.Count} активаторов, {allHints.Count} подсказок");
         }
 
         /// <summary>
-        /// Создание кэша связей между hints и activators (оптимизация)
-        /// </summary>
-        private void BuildHintActivatorCache()
-        {
-            foreach (var hint in allHints)
-            {
-                // Ищем связанный activator один раз
-                PartActivator activator = FindActivatorForHint(hint);
-                if (activator != null)
-                {
-                    hintToActivatorCache[hint] = activator;
-                    activatorToHintCache[activator] = hint;
-                }
-            }
-        }
-
-        /// <summary>
-        /// Поиск activator для hint (вызывается один раз при инициализации)
-        /// </summary>
-        private PartActivator FindActivatorForHint(HintController hint)
-        {
-            // 1. У родителя
-            var activator = hint.GetComponentInParent<PartActivator>();
-            
-            // 2. У siblings
-            if (activator == null && hint.transform.parent != null)
-            {
-                activator = hint.transform.parent.GetComponentInChildren<PartActivator>();
-            }
-            
-            // 3. На самом hint
-            if (activator == null)
-            {
-                activator = hint.GetComponent<PartActivator>();
-            }
-            
-            return activator;
-        }
-
-        /// <summary>
-        /// Начало перетаскивания детали
+        /// Начало перетаскивания - показываем совместимые hints
         /// </summary>
         public void OnPartDragStart(PartType type)
         {
-            currentDraggingType = type;
-            
-            // Скрываем все подсказки
-            HideAllHints();
-            
-            // Показываем только совместимые подсказки
-            ShowCompatibleHints(type);
+            foreach (var hint in allHints)
+            {
+                // Показываем только совместимые и неактивированные
+                if (hint.CompatiblePartType == type && !IsHintActivatorActive(hint))
+                {
+                    hint.Show();
+                }
+                else
+                {
+                    hint.Hide();
+                }
+            }
         }
 
         /// <summary>
-        /// Конец перетаскивания детали
+        /// Конец перетаскивания - пытаемся активировать деталь
         /// </summary>
         public bool OnPartDragEnd(PartType type, Vector3 dropPosition)
         {
-            currentDraggingType = null;
-            
-            // Пытаемся активировать ближайшую неактивную деталь этого типа
-            bool activated = TryActivateNearestPart(type, dropPosition);
+            bool activated = TryActivatePart(type, dropPosition);
             
             if (!activated)
             {
-                // Показываем все подсказки снова, так как деталь не установлена
-                ShowAllHints();
+                // Не удалось - показываем все hints обратно
+                ShowAllInactiveHints();
             }
             
             return activated;
@@ -183,25 +109,42 @@ namespace VehicleConstructor
         /// <summary>
         /// Попытка активировать ближайшую деталь
         /// </summary>
-        private bool TryActivateNearestPart(PartType type, Vector3 position)
+        private bool TryActivatePart(PartType type, Vector3 position)
         {
-            if (!partActivators.ContainsKey(type))
+            PartActivator nearest = FindNearestInactivePart(type, position);
+            
+            if (nearest != null)
             {
-                Debug.LogWarning($"[VehicleConstructor] Нет активаторов для {type}");
-                return false;
+                nearest.Activate();
+                HideHintForPart(nearest);
+                
+                // Поднимаем транспорт при первом колесе
+                if (!vehicleLifted && IsWheelType(type))
+                {
+                    LiftVehicle();
+                }
+                
+                return true;
             }
+            
+            return false;
+        }
 
-            // Находим ближайший неактивный активатор
+        /// <summary>
+        /// Найти ближайшую неактивную деталь
+        /// </summary>
+        private PartActivator FindNearestInactivePart(PartType type, Vector3 position)
+        {
             PartActivator nearest = null;
-            float minDistance = float.MaxValue;
+            float minDistance = activationRadius;
 
-            foreach (var activator in partActivators[type])
+            foreach (var activator in allActivators)
             {
-                if (!activator.IsActivated)
+                if (activator.PartType == type && !activator.IsActivated)
                 {
                     float distance = Vector3.Distance(activator.transform.position, position);
                     
-                    if (distance < minDistance && distance <= activationRadius)
+                    if (distance < minDistance)
                     {
                         minDistance = distance;
                         nearest = activator;
@@ -209,123 +152,59 @@ namespace VehicleConstructor
                 }
             }
 
-            // Активируем найденную деталь
-            if (nearest != null)
-            {
-                nearest.Activate();
-                
-                // Скрываем подсказку для этой детали
-                HideHintForActivator(nearest);
-                
-                // Поднимаем транспорт при установке первого колеса
-                if (autoLiftOnFirstWheel && !vehicleLifted && IsWheelType(type))
-                {
-                    LiftVehicle();
-                }
-                
-                return true;
-            }
-
-            return false;
+            return nearest;
         }
 
         /// <summary>
-        /// Скрыть подсказку для активированной детали
+        /// Скрыть hint для активированной детали
         /// </summary>
-        private void HideHintForActivator(PartActivator activator)
-        {
-            // Используем кэш вместо множественных GetComponent
-            if (activatorToHintCache.TryGetValue(activator, out HintController hint))
-            {
-                hint.Hide();
-            }
-        }
-
-        /// <summary>
-        /// Показать все подсказки
-        /// </summary>
-        private void ShowAllHints()
+        private void HideHintForPart(PartActivator activator)
         {
             foreach (var hint in allHints)
             {
-                // Используем кэш вместо GetComponent
-                if (hintToActivatorCache.TryGetValue(hint, out PartActivator parentActivator))
+                if (hint.CompatiblePartType == activator.PartType && 
+                    hint.transform.IsChildOf(activator.transform.parent))
                 {
-                    if (!parentActivator.IsActivated)
-                    {
-                        hint.Show();
-                    }
-                    else
-                    {
-                        hint.Hide();
-                    }
+                    hint.Hide();
+                    break;
                 }
-                else
+            }
+        }
+
+        /// <summary>
+        /// Показать все hints для неактивированных деталей
+        /// </summary>
+        private void ShowAllInactiveHints()
+        {
+            foreach (var hint in allHints)
+            {
+                if (!IsHintActivatorActive(hint))
                 {
-                    // Если нет связанного activator - показываем hint
                     hint.Show();
                 }
             }
         }
 
         /// <summary>
-        /// Скрыть все подсказки
+        /// Проверить, активирован ли activator для данного hint
         /// </summary>
-        private void HideAllHints()
+        private bool IsHintActivatorActive(HintController hint)
         {
-            foreach (var hint in allHints)
+            // Ищем activator того же типа рядом с hint
+            foreach (var activator in allActivators)
             {
-                hint.Hide();
-            }
-        }
-
-        /// <summary>
-        /// Показать только совместимые подсказки
-        /// </summary>
-        private void ShowCompatibleHints(PartType type)
-        {
-            if (hintsByType.ContainsKey(type))
-            {
-                foreach (var hint in hintsByType[type])
+                if (activator.PartType == hint.CompatiblePartType && 
+                    hint.transform.IsChildOf(activator.transform.parent) &&
+                    activator.IsActivated)
                 {
-                    // Используем кэш вместо GetComponent
-                    if (hintToActivatorCache.TryGetValue(hint, out PartActivator parentActivator))
-                    {
-                        if (!parentActivator.IsActivated)
-                        {
-                            hint.Show();
-                        }
-                    }
-                    else
-                    {
-                        // Если нет связанного activator - показываем hint
-                        hint.Show();
-                    }
+                    return true;
                 }
             }
+            return false;
         }
 
         /// <summary>
-        /// Проверка, все ли обязательные детали активированы
-        /// </summary>
-        public bool IsVehicleComplete()
-        {
-            // Проверяем, есть ли хотя бы одно активированное колесо каждого типа
-            bool hasLeftWheel = false;
-            bool hasRightWheel = false;
-
-            if (partActivators.ContainsKey(PartType.Wheel))
-            {
-                int activeWheels = partActivators[PartType.Wheel].Count(a => a.IsActivated);
-                hasLeftWheel = activeWheels >= 1;
-                hasRightWheel = activeWheels >= 2;
-            }
-
-            return hasLeftWheel && hasRightWheel;
-        }
-
-        /// <summary>
-        /// Проверка, является ли тип детали колесом
+        /// Проверка типа колеса
         /// </summary>
         private bool IsWheelType(PartType type)
         {
@@ -333,19 +212,18 @@ namespace VehicleConstructor
         }
 
         /// <summary>
-        /// Поднять транспорт для установки колёс
+        /// Поднять транспорт
         /// </summary>
         private void LiftVehicle()
         {
             if (vehicleRoot == null || vehicleLifted) return;
 
-            Vector3 newPosition = originalVehiclePosition + Vector3.up * vehicleLiftHeight;
-            vehicleRoot.position = newPosition;
+            vehicleRoot.position = originalVehiclePosition + Vector3.up * vehicleLiftHeight;
             vehicleLifted = true;
         }
 
         /// <summary>
-        /// Опустить транспорт обратно (если нужно)
+        /// Опустить транспорт
         /// </summary>
         public void LowerVehicle()
         {
@@ -354,8 +232,14 @@ namespace VehicleConstructor
             vehicleRoot.position = originalVehiclePosition;
             vehicleLifted = false;
         }
+
+        /// <summary>
+        /// Проверка готовности транспорта
+        /// </summary>
+        public bool IsVehicleComplete()
+        {
+            int activeWheels = allActivators.Count(a => a.PartType == PartType.Wheel && a.IsActivated);
+            return activeWheels >= 2;
+        }
     }
 }
-
-
-

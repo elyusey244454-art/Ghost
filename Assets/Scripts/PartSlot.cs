@@ -44,8 +44,8 @@ namespace VehicleConstructor
             constructorManager = VehicleConstructorManager.Instance;
             if (constructorManager == null)
             {
-                constructorManager = FindObjectOfType<VehicleConstructorManager>();
-                Debug.LogWarning("[PartSlot] VehicleConstructorManager найден через FindObjectOfType - рекомендуется использовать Singleton");
+                constructorManager = FindFirstObjectByType<VehicleConstructorManager>();
+                Debug.LogWarning("[PartSlot] VehicleConstructorManager найден через FindFirstObjectByType - рекомендуется использовать Singleton");
             }
 
             // Ищем Part_preview, если не назначен

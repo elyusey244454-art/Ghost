@@ -39,7 +39,7 @@ namespace VehicleConstructor
             // Автоматически ищем транспорт
             if (autoDetectVehicle && target == null)
             {
-                AutoVehicleMovement vehicleMovement = FindObjectOfType<AutoVehicleMovement>();
+                AutoVehicleMovement vehicleMovement = FindFirstObjectByType<AutoVehicleMovement>();
                 if (vehicleMovement != null)
                 {
                     target = vehicleMovement.transform;

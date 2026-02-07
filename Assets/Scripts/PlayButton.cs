@@ -48,12 +48,12 @@ namespace VehicleConstructor
             // Ищем компоненты, если не назначены (используем Singleton где возможно)
             if (constructorManager == null)
             {
-                constructorManager = VehicleConstructorManager.Instance ?? FindObjectOfType<VehicleConstructorManager>();
+                constructorManager = VehicleConstructorManager.Instance ?? FindFirstObjectByType<VehicleConstructorManager>();
             }
 
             if (vehicleMovement == null)
             {
-                vehicleMovement = FindObjectOfType<AutoVehicleMovement>();
+                vehicleMovement = FindFirstObjectByType<AutoVehicleMovement>();
             }
 
             if (partHolder == null)
@@ -63,7 +63,7 @@ namespace VehicleConstructor
 
             if (cameraFollow == null)
             {
-                cameraFollow = FindObjectOfType<CameraFollow>();
+                cameraFollow = FindFirstObjectByType<CameraFollow>();
             }
 
             // Скрываем кнопку при старте
