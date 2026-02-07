@@ -7,27 +7,63 @@ namespace VehicleConstructor
     /// <summary>
     /// Главный менеджер конструктора транспорта
     /// SOLID: 
+    /// - Single Responsibility: управление конструктором
     /// - Open/Closed: легко расширяется добавлением новых PartActivator и HintController
     /// - Dependency Inversion: зависит от абстракций (компонентов), а не конкретных классов
+    /// Паттерн: Singleton для глобального доступа
     /// </summary>
     public class VehicleConstructorManager : MonoBehaviour
     {
+        // Singleton instance
+        private static VehicleConstructorManager instance;
+        public static VehicleConstructorManager Instance => instance;
+
         [Header("References")]
         [SerializeField] private Transform vehicleRoot; // Корень транспорта
         
         [Header("Settings")]
         [SerializeField] private float activationRadius = 2f; // Радиус для активации детали
+        [SerializeField] private float vehicleLiftHeight = 0.5f; // На сколько поднять транспорт при установке колёс
+        [SerializeField] private bool autoLiftOnFirstWheel = true; // Автоматически поднимать при первом колесе
         
         // Кэш всех активаторов и подсказок
         private Dictionary<PartType, List<PartActivator>> partActivators = new Dictionary<PartType, List<PartActivator>>();
         private Dictionary<PartType, List<HintController>> hintsByType = new Dictionary<PartType, List<HintController>>();
         private List<HintController> allHints = new List<HintController>();
+        private Dictionary<HintController, PartActivator> hintToActivatorCache = new Dictionary<HintController, PartActivator>(); // Кэш связей hint ↔ activator
+        private Dictionary<PartActivator, HintController> activatorToHintCache = new Dictionary<PartActivator, HintController>(); // Кэш связей activator ↔ hint
         
         private PartType? currentDraggingType = null;
+        private bool vehicleLifted = false; // Поднят ли уже транспорт
+        private Vector3 originalVehiclePosition; // Исходная позиция транспорта
 
         void Awake()
         {
+            // Singleton pattern
+            if (instance != null && instance != this)
+            {
+                Debug.LogWarning("[VehicleConstructor] Обнаружен дубликат VehicleConstructorManager! Уничтожаем...");
+                Destroy(gameObject);
+                return;
+            }
+            instance = this;
+
+            // Сохраняем исходную позицию транспорта
+            if (vehicleRoot != null)
+            {
+                originalVehiclePosition = vehicleRoot.position;
+            }
+            
             InitializeComponents();
+        }
+
+        void OnDestroy()
+        {
+            // Очищаем singleton при уничтожении
+            if (instance == this)
+            {
+                instance = null;
+            }
         }
 
         /// <summary>
@@ -65,7 +101,50 @@ namespace VehicleConstructor
                 Debug.Log($"[VehicleConstructor] Найдена подсказка для: {hint.CompatiblePartType}");
             }
 
+            // Создаём кэш связей hint ↔ activator (один раз при инициализации)
+            BuildHintActivatorCache();
+
             Debug.Log($"[VehicleConstructor] Инициализация завершена. Активаторов: {activators.Length}, Подсказок: {allHints.Count}");
+        }
+
+        /// <summary>
+        /// Создание кэша связей между hints и activators (оптимизация)
+        /// </summary>
+        private void BuildHintActivatorCache()
+        {
+            foreach (var hint in allHints)
+            {
+                // Ищем связанный activator один раз
+                PartActivator activator = FindActivatorForHint(hint);
+                if (activator != null)
+                {
+                    hintToActivatorCache[hint] = activator;
+                    activatorToHintCache[activator] = hint;
+                }
+            }
+        }
+
+        /// <summary>
+        /// Поиск activator для hint (вызывается один раз при инициализации)
+        /// </summary>
+        private PartActivator FindActivatorForHint(HintController hint)
+        {
+            // 1. У родителя
+            var activator = hint.GetComponentInParent<PartActivator>();
+            
+            // 2. У siblings
+            if (activator == null && hint.transform.parent != null)
+            {
+                activator = hint.transform.parent.GetComponentInChildren<PartActivator>();
+            }
+            
+            // 3. На самом hint
+            if (activator == null)
+            {
+                activator = hint.GetComponent<PartActivator>();
+            }
+            
+            return activator;
         }
 
         /// <summary>
@@ -80,31 +159,25 @@ namespace VehicleConstructor
             
             // Показываем только совместимые подсказки
             ShowCompatibleHints(type);
-            
-            Debug.Log($"[VehicleConstructor] Drag начат для {type}");
         }
 
         /// <summary>
         /// Конец перетаскивания детали
         /// </summary>
-        public void OnPartDragEnd(PartType type, Vector3 dropPosition)
+        public bool OnPartDragEnd(PartType type, Vector3 dropPosition)
         {
             currentDraggingType = null;
             
             // Пытаемся активировать ближайшую неактивную деталь этого типа
             bool activated = TryActivateNearestPart(type, dropPosition);
             
-            if (activated)
+            if (!activated)
             {
-                Debug.Log($"[VehicleConstructor] Деталь {type} активирована!");
-            }
-            else
-            {
-                Debug.Log($"[VehicleConstructor] Не удалось активировать {type}");
+                // Показываем все подсказки снова, так как деталь не установлена
+                ShowAllHints();
             }
             
-            // Показываем все подсказки снова
-            ShowAllHints();
+            return activated;
         }
 
         /// <summary>
@@ -144,6 +217,12 @@ namespace VehicleConstructor
                 // Скрываем подсказку для этой детали
                 HideHintForActivator(nearest);
                 
+                // Поднимаем транспорт при установке первого колеса
+                if (autoLiftOnFirstWheel && !vehicleLifted && IsWheelType(type))
+                {
+                    LiftVehicle();
+                }
+                
                 return true;
             }
 
@@ -155,9 +234,8 @@ namespace VehicleConstructor
         /// </summary>
         private void HideHintForActivator(PartActivator activator)
         {
-            // Находим подсказку, которая является дочерним объектом активатора
-            var hint = activator.GetComponentInChildren<HintController>();
-            if (hint != null)
+            // Используем кэш вместо множественных GetComponent
+            if (activatorToHintCache.TryGetValue(activator, out HintController hint))
             {
                 hint.Hide();
             }
@@ -170,10 +248,21 @@ namespace VehicleConstructor
         {
             foreach (var hint in allHints)
             {
-                // Показываем только подсказки для неактивированных деталей
-                var parentActivator = hint.GetComponentInParent<PartActivator>();
-                if (parentActivator == null || !parentActivator.IsActivated)
+                // Используем кэш вместо GetComponent
+                if (hintToActivatorCache.TryGetValue(hint, out PartActivator parentActivator))
                 {
+                    if (!parentActivator.IsActivated)
+                    {
+                        hint.Show();
+                    }
+                    else
+                    {
+                        hint.Hide();
+                    }
+                }
+                else
+                {
+                    // Если нет связанного activator - показываем hint
                     hint.Show();
                 }
             }
@@ -199,10 +288,17 @@ namespace VehicleConstructor
             {
                 foreach (var hint in hintsByType[type])
                 {
-                    // Показываем только если деталь ещё не активирована
-                    var parentActivator = hint.GetComponentInParent<PartActivator>();
-                    if (parentActivator == null || !parentActivator.IsActivated)
+                    // Используем кэш вместо GetComponent
+                    if (hintToActivatorCache.TryGetValue(hint, out PartActivator parentActivator))
                     {
+                        if (!parentActivator.IsActivated)
+                        {
+                            hint.Show();
+                        }
+                    }
+                    else
+                    {
+                        // Если нет связанного activator - показываем hint
                         hint.Show();
                     }
                 }
@@ -228,6 +324,37 @@ namespace VehicleConstructor
             return hasLeftWheel && hasRightWheel;
         }
 
+        /// <summary>
+        /// Проверка, является ли тип детали колесом
+        /// </summary>
+        private bool IsWheelType(PartType type)
+        {
+            return type == PartType.Wheel || type == PartType.SpikedWheel;
+        }
+
+        /// <summary>
+        /// Поднять транспорт для установки колёс
+        /// </summary>
+        private void LiftVehicle()
+        {
+            if (vehicleRoot == null || vehicleLifted) return;
+
+            Vector3 newPosition = originalVehiclePosition + Vector3.up * vehicleLiftHeight;
+            vehicleRoot.position = newPosition;
+            vehicleLifted = true;
+        }
+
+        /// <summary>
+        /// Опустить транспорт обратно (если нужно)
+        /// </summary>
+        public void LowerVehicle()
+        {
+            if (vehicleRoot == null || !vehicleLifted) return;
+
+            vehicleRoot.position = originalVehiclePosition;
+            vehicleLifted = false;
+        }
+
         #if UNITY_EDITOR
         /// <summary>
         /// Визуализация радиуса активации в редакторе
@@ -251,5 +378,6 @@ namespace VehicleConstructor
         #endif
     }
 }
+
 
 

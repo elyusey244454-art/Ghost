@@ -1,5 +1,6 @@
 using UnityEngine;
 using UnityEngine.EventSystems;
+using UnityEngine.UI;
 
 namespace VehicleConstructor
 {
@@ -14,26 +15,47 @@ namespace VehicleConstructor
         
         [Header("Visual References")]
         [SerializeField] private GameObject visualPrefab; // 3D модель для drag
+        [SerializeField] private GameObject partPreview; // Part_preview объект для скрытия
         
         private VehicleConstructorManager constructorManager;
         private GameObject draggedVisual;
         private Camera mainCamera;
         private bool isDragging = false;
         private Vector2 currentPointerPosition;
+        private bool isUsed = false; // Флаг, что деталь уже установлена
+        private Plane dragPlane; // Кэшируем плоскость для drag
 
         /// <summary>
         /// Тип детали в этом слоте
         /// </summary>
         public PartType PartType => partType;
 
-        void Start()
+        void Awake()
         {
-            constructorManager = FindObjectOfType<VehicleConstructorManager>();
             mainCamera = Camera.main;
             
+            // Кэшируем плоскость для drag (Y = 1)
+            dragPlane = new Plane(Vector3.up, new Vector3(0, 1, 0));
+        }
+
+        void Start()
+        {
+            // Используем singleton pattern или внедрение зависимости
+            constructorManager = VehicleConstructorManager.Instance;
             if (constructorManager == null)
             {
-                Debug.LogError("[PartSlot] VehicleConstructorManager не найден!");
+                constructorManager = FindObjectOfType<VehicleConstructorManager>();
+                Debug.LogWarning("[PartSlot] VehicleConstructorManager найден через FindObjectOfType - рекомендуется использовать Singleton");
+            }
+
+            // Ищем Part_preview, если не назначен
+            if (partPreview == null)
+            {
+                partPreview = transform.Find("Part_preview")?.gameObject;
+                if (partPreview == null)
+                {
+                    Debug.LogWarning($"[PartSlot] Part_preview не найден у {gameObject.name}");
+                }
             }
         }
 
@@ -54,7 +76,7 @@ namespace VehicleConstructor
         /// </summary>
         public void OnPointerDown(PointerEventData eventData)
         {
-            if (constructorManager == null) return;
+            if (constructorManager == null || isUsed) return;
 
             // Создаём 3D визуал для drag
             if (visualPrefab != null)
@@ -69,10 +91,11 @@ namespace VehicleConstructor
                 // Отключаем физику у визуала
                 DisablePhysics(draggedVisual);
 
+                // Скрываем Part_preview во время drag
+                HidePartPreview();
+
                 // Уведомляем конструктор о начале drag
                 constructorManager.OnPartDragStart(partType);
-                
-                Debug.Log($"[PartSlot] Начало drag для {partType}");
                 
                 // Сразу обновляем позицию
                 UpdateDragPosition();
@@ -92,9 +115,21 @@ namespace VehicleConstructor
             currentPointerPosition = eventData.position;
 
             // Пытаемся активировать деталь
+            bool partAttached = false;
             if (constructorManager != null && draggedVisual != null)
             {
-                constructorManager.OnPartDragEnd(partType, draggedVisual.transform.position);
+                partAttached = constructorManager.OnPartDragEnd(partType, draggedVisual.transform.position);
+            }
+
+            // Если деталь успешно установлена - помечаем слот как использованный
+            if (partAttached)
+            {
+                isUsed = true;
+            }
+            else
+            {
+                // Если не установлена - показываем Part_preview обратно
+                ShowPartPreview();
             }
 
             // Удаляем визуал drag
@@ -110,14 +145,12 @@ namespace VehicleConstructor
         /// </summary>
         private void UpdateDragPosition()
         {
-            // Raycast от курсора на плоскость Y = 1 (высота машины)
+            // Raycast от курсора на кэшированную плоскость
             Ray ray = mainCamera.ScreenPointToRay(currentPointerPosition);
-            Plane plane = new Plane(Vector3.up, new Vector3(0, 1, 0));
             
-            if (plane.Raycast(ray, out float distance))
+            if (dragPlane.Raycast(ray, out float distance))
             {
-                Vector3 worldPos = ray.GetPoint(distance);
-                draggedVisual.transform.position = worldPos;
+                draggedVisual.transform.position = ray.GetPoint(distance);
             }
         }
 
@@ -139,6 +172,28 @@ namespace VehicleConstructor
             
             foreach (var col in obj.GetComponentsInChildren<Collider2D>())
                 col.enabled = false;
+        }
+
+        /// <summary>
+        /// Скрыть Part_preview
+        /// </summary>
+        private void HidePartPreview()
+        {
+            if (partPreview != null)
+            {
+                partPreview.SetActive(false);
+            }
+        }
+
+        /// <summary>
+        /// Показать Part_preview
+        /// </summary>
+        private void ShowPartPreview()
+        {
+            if (partPreview != null)
+            {
+                partPreview.SetActive(true);
+            }
         }
     }
 }

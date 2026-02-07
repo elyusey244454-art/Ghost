@@ -37,7 +37,10 @@ namespace VehicleConstructor
         public void Show()
         {
             isVisible = true;
-            spriteRenderer.enabled = true;
+            if (spriteRenderer != null)
+            {
+                spriteRenderer.enabled = true;
+            }
         }
 
         /// <summary>
@@ -46,7 +49,14 @@ namespace VehicleConstructor
         public void Hide()
         {
             isVisible = false;
-            spriteRenderer.enabled = false;
+            if (spriteRenderer != null)
+            {
+                spriteRenderer.enabled = false;
+            }
+            else
+            {
+                Debug.LogWarning($"[HintController] SpriteRenderer не найден на {gameObject.name}");
+            }
         }
 
         /// <summary>
@@ -58,5 +68,6 @@ namespace VehicleConstructor
         }
     }
 }
+
 
 
